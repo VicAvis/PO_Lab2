@@ -54,13 +54,13 @@ void AtomicFunc(const std::vector<int>& A, int start, int stop, std::atomic<int>
         }
     }
     int oldCounter = counterAtomic.load();
-    while (!counterAtomic.compare_exchange_weak(oldCounter, localCounter)) {
+    while (!counterAtomic.compare_exchange_weak(oldCounter, oldCounter + localCounter)) {
 
     }
 
     int oldMax = maxAtomic.load();
     int newMax = std::max(oldMax, localMaxVal);
-    while (!maxAtomic.compare_exchange_weak(oldMax, newMax)) {
+    while (localMaxVal > oldMax && !maxAtomic.compare_exchange_weak(oldMax, newMax)) {
 
     }
 }
@@ -74,7 +74,7 @@ int main() {
         std::vector<int> v(size);
         randomNumbers(v, seed);
 
-        std::cout << "\n\n★ ★ ★ ★ ★  Matrix Size: " << size << " ★ ★ ★ ★ ★ ";
+        std::cout << "\n\n★ ★ ★ ★ ★  Vector Size: " << size << " ★ ★ ★ ★ ★ ";
 
         for (int numThreads : threadCounts) {
             int elemPerThread = size / numThreads;
@@ -83,22 +83,21 @@ int main() {
             auto startTime = high_resolution_clock::now();
             std::vector<std::thread> threads;
 
-            std::mutex mtx;
-            int sharedCounter = 0;
-            int sharedMax = 0;
+            // std::mutex mtx;
+            // int sharedCounter = 0;
+            // int sharedMax = 0;
 
-            // std::atomic<int> counterAtomic(0);
-            // std::atomic<int> maxAtomic(0);
+            std::atomic<int> counterAtomic(0);
+            std::atomic<int> maxAtomic(0);
 
             for (int k = 0; k < numThreads; ++k) {
                 int starting = k * elemPerThread + std::min(k, remainder);
                 int stopping = starting + elemPerThread + (k < remainder ? 1 : 0);
 
-                // threads.emplace_back(AtomicFunc, std::cref(v), starting, stopping,
-                //                      std::ref(counterAtomic), std::ref(maxAtomic));
+                threads.emplace_back(AtomicFunc, std::cref(v), starting, stopping, std::ref(counterAtomic), std::ref(maxAtomic));
 
-                threads.emplace_back(mutexFunc, std::cref(v), starting, stopping,
-                                     std::ref(sharedCounter), std::ref(sharedMax), std::ref(mtx));
+                // threads.emplace_back(mutexFunc, std::cref(v), starting, stopping,
+                //                      std::ref(sharedCounter), std::ref(sharedMax), std::ref(mtx));
             }
 
             for (auto& t : threads) t.join();
@@ -107,9 +106,9 @@ int main() {
             double elapsed = duration_cast<nanoseconds>(endTime - startTime).count() * 1e-9;
 
             std::cout << "\nThreads: " << std::setw(3) << numThreads << ", Time: " << std::fixed << std::setprecision(6) << elapsed << " seconds";
-            // std::cout << ", Count: " << counterAtomic << ", Max: " << maxAtomic;
+            std::cout << ", Count: " << counterAtomic << ", Max: " << maxAtomic;
 
-            std::cout << ", Count: " << sharedCounter << ", Max: " << sharedMax;
+            // std::cout << ", Count: " << sharedCounter << ", Max: " << sharedMax;
         }
     }
     return 0;
